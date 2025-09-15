@@ -25,9 +25,9 @@
 
 ### O que vemos nos gráficos
 
-- “Virada” (início da rede gigante): S passa de ~0 para cima de 0.1 por volta de c≈0.77.
+- “Virada” (início da rede gigante): S ultrapassa 0.2 por volta de c≈1.07.
 
-- Rede “quase toda conectada”: S chega perto de 0.9 a partir de c≈2.56.
+- Rede “quase toda conectada”: S ultrapassa 0.95 a partir de c≈3.09.
 
 - s_finite costuma formar um pico perto da virada: as ilhas pequenas se juntam antes de a ilha gigante dominar.
 
@@ -49,9 +49,9 @@
 
 ### Perguntas e respostas
 
-- Pergunta: “Gere redes ER com n=100, variando ⟨k⟩; estime S.” Resposta: geramos 60 valores de c entre 0.1 e 6.0, com 100–200 amostras por ponto; S(c) e s_finite(c) estão nos gráficos acima.
+- Pergunta: “Gere redes ER com n=100, variando ⟨k⟩; estime S.” Resposta: variamos c de 0.1 a 6.0 (60 pontos) com 100–200 amostras por ponto; S(c) e s_finite(c) estão nos gráficos.
 
-- Pergunta: “Onde está o ponto crítico e o fim do supercrítico?” Resposta: a virada ocorre por volta de c≈0.77 (S>0.1). Consideramos “supercrítico consolidado” quando S≈0.9, a partir de c≈2.56.
+- Pergunta: “Onde está o ponto crítico e o fim do supercrítico?” Resposta: início ~ c≈1.07 (S>0.2) e regime consolidado ~ c≈3.09 (S>0.95).
 
 - Pergunta: “Log deixa a transição mais chamativa?” Resposta: sim, log no eixo x enfatiza a vizinhança do limiar.
 

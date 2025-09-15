@@ -2,54 +2,14 @@ import math
 import numpy as np
 import networkx as nx
 import matplotlib.pyplot as plt
-import pandas as pd
 import argparse
 from pathlib import Path
 from typing import Tuple, Dict
 
 BASE_DIR = Path(__file__).resolve().parent
-DATA_DIR = BASE_DIR.parent / 'data'
 OUT_DIR = BASE_DIR / 'out'
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 
-def load_graph_undirected(path: Path, directed: bool = False) -> nx.Graph:
-    """
-    Lê edgelist (duas colunas src dst). Se directed=True, cria DiGraph e converte; caso contrário cria Graph.
-    Retorna SEMPRE um grafo não direcionado para medições de conectividade.
-    """
-    df = pd.read_csv(path, sep='\s+', header=None, usecols=[0,1], names=['src','dst'], engine='python', comment='#')
-    if directed:
-        Gd = nx.from_pandas_edgelist(df, source='src', target='dst', create_using=nx.DiGraph())
-        return Gd.to_undirected()
-    return nx.from_pandas_edgelist(df, source='src', target='dst', create_using=nx.Graph())
-
-def sample_induced_subgraph(G: nx.Graph, n: int, seed: int = 42) -> nx.Graph:
-    """Retorna subgrafo induzido por uma amostra de n nós do grafo G."""
-    rng = np.random.default_rng(seed)
-    nodes = list(G.nodes())
-    if len(nodes) <= n:
-        return G.copy()
-    idx = rng.choice(len(nodes), size=n, replace=False)
-    chosen = [nodes[i] for i in idx]
-    return G.subgraph(chosen).copy()
-
-def largest_component_nodes(G: nx.Graph) -> list:
-    """Retorna lista de nós da maior componente do grafo não direcionado equivalente."""
-    H = G.to_undirected() if G.is_directed() else G
-    comps = list(nx.connected_components(H))
-    if not comps:
-        return []
-    return list(max(comps, key=len))
-
-def edge_percolation(G: nx.Graph, q: float, seed: int | None = None) -> nx.Graph:
-    """Mantém cada aresta com probabilidade q (percolação por arestas)."""
-    rng = np.random.default_rng(seed)
-    H = nx.Graph()
-    H.add_nodes_from(G.nodes())
-    for u, v in G.edges():
-        if rng.random() < q:
-            H.add_edge(u, v)
-    return H
 
 def giant_component_fraction(G: nx.Graph) -> Tuple[float, float]:
     """
@@ -70,62 +30,7 @@ def giant_component_fraction(G: nx.Graph) -> Tuple[float, float]:
         s_mean = 0.0
     return S, s_mean
 
-def estimate_curves_percolation(G_base: nx.Graph, q_values: np.ndarray, samples: int, seed: int = 42) -> Dict[str, np.ndarray]:
-    """Para cada q, estima E[S] e E[s_finite] sobre 'samples' percolações em G_base."""
-    rng = np.random.default_rng(seed)
-    S_means = []
-    s_means = []
-    for q in q_values:
-        S_list, s_list = [], []
-        for _ in range(samples):
-            H = edge_percolation(G_base, q, seed=int(rng.integers(0, 1_000_000)))
-            S, s_fin = giant_component_fraction(H)
-            S_list.append(S)
-            s_list.append(s_fin)
-        S_means.append(float(np.mean(S_list)))
-        s_means.append(float(np.mean(s_list)))
-    return { 'q': q_values, 'S': np.array(S_means), 's_finite': np.array(s_means) }
-
-def plot_curves_percolation(data: Dict[str, np.ndarray], logx: bool = False, logy: bool = False, title: str = 'Percolação (n=100)') -> Path:
-    """Plota S(q) e s_finite(q) com opção de eixos log."""
-    q = data['q']
-    S = data['S']
-    s = data['s_finite']
-
-    fig, ax = plt.subplots(1, 1, figsize=(7, 4))
-    ax.plot(q, S, color='tab:blue', lw=2, label='S (fração GCC)')
-    ax.plot(q, s, color='tab:red', lw=2, label='s_finite (média comp. finitas)')
-    ax.set_xlabel('probabilidade de manter aresta (q)')
-    ax.set_ylabel('fração de nós')
-    ax.set_title(title)
-    if logx:
-        ax.set_xscale('log')
-    if logy:
-        ax.set_yscale('log')
-    ax.set_ylim(0, 1.05)
-    ax.legend(loc='best')
-    fig.tight_layout()
-    out = OUT_DIR / ('percolacao_logx%s_logy%s.png' % (int(logx), int(logy)))
-    fig.savefig(out, dpi=150)
-    plt.close(fig)
-    return out
-
-def save_snapshots_graph(G_base: nx.Graph, q_list: list[float], label: str, seed: int = 123) -> None:
-    """Salva snapshots da percolação no subgrafo base para valores de q."""
-    for q in q_list:
-        H = edge_percolation(G_base, q, seed=seed)
-        try:
-            pos = nx.spring_layout(H, seed=seed)
-        except Exception:
-            # fallback sem SciPy
-            pos = nx.random_layout(H, seed=seed)
-        plt.figure(figsize=(5, 4))
-        nx.draw_networkx(H, pos=pos, node_size=15, width=0.4, with_labels=False)
-        plt.title(f"Snapshot {label}: n={H.number_of_nodes()}, q={q}")
-        out = OUT_DIR / f"snapshot_{label}_n{H.number_of_nodes()}_q{q}.png"
-        plt.tight_layout()
-        plt.savefig(out, dpi=150)
-        plt.close()
+ 
 
 def write_markdown_answers(data: Dict[str, np.ndarray], out_linear: Path, out_logx: Path, snapshots: list[Path], dataset_label: str) -> Path:
     """
@@ -139,8 +44,10 @@ def write_markdown_answers(data: Dict[str, np.ndarray], out_linear: Path, out_lo
             if yi >= thr:
                 return float(xi)
         return float('nan')
-    x_10 = _first_cross(x, S, 0.10)
-    x_90 = _first_cross(x, S, 0.90)
+    # Marcadores mais estáveis (tamanho finito):
+    # início quando S>0.2 e consolidado quando S>0.95
+    x_start = _first_cross(x, S, 0.20)
+    x_full  = _first_cross(x, S, 0.95)
     lines = []
     lines.append(f'## Explicação simples – {dataset_label} (n=100)\n')
     lines.append('\n')
@@ -160,8 +67,8 @@ def write_markdown_answers(data: Dict[str, np.ndarray], out_linear: Path, out_lo
         lines.append(f'![Snapshot](./{p.relative_to(BASE_DIR)})')
     lines.append('\n')
     lines.append('### O que vemos nos gráficos\n')
-    lines.append(f'- “Virada” (início da rede gigante): S passa de ~0 para cima de 0.1 por volta de {data["x_label"]}≈{x_10:.2f}.\n')
-    lines.append(f'- Rede “quase toda conectada”: S chega perto de 0.9 a partir de {data["x_label"]}≈{x_90:.2f}.\n')
+    lines.append(f'- “Virada” (início da rede gigante): S ultrapassa 0.2 por volta de {data["x_label"]}≈{x_start:.2f}.\n')
+    lines.append(f'- Rede “quase toda conectada”: S ultrapassa 0.95 a partir de {data["x_label"]}≈{x_full:.2f}.\n')
     lines.append('- s_finite costuma formar um pico perto da virada: as ilhas pequenas se juntam antes de a ilha gigante dominar.\n')
     lines.append('\n')
     lines.append('### Dica de leitura\n')
@@ -174,8 +81,8 @@ def write_markdown_answers(data: Dict[str, np.ndarray], out_linear: Path, out_lo
     # Perguntas e respostas explícitas
     lines.append('### Perguntas e respostas\n')
     if data['x_label'] == 'c':
-        lines.append('- Pergunta: “Gere redes ER com n=100, variando ⟨k⟩; estime S.” Resposta: geramos 60 valores de c entre 0.1 e 6.0, com 100–200 amostras por ponto; S(c) e s_finite(c) estão nos gráficos acima.\n')
-        lines.append(f'- Pergunta: “Onde está o ponto crítico e o fim do supercrítico?” Resposta: a virada ocorre por volta de c≈{x_10:.2f} (S>0.1). Consideramos “supercrítico consolidado” quando S≈0.9, a partir de c≈{x_90:.2f}.\n')
+        lines.append('- Pergunta: “Gere redes ER com n=100, variando ⟨k⟩; estime S.” Resposta: variamos c de 0.1 a 6.0 (60 pontos) com 100–200 amostras por ponto; S(c) e s_finite(c) estão nos gráficos.\n')
+        lines.append(f'- Pergunta: “Onde está o ponto crítico e o fim do supercrítico?” Resposta: início ~ c≈{x_start:.2f} (S>0.2) e regime consolidado ~ c≈{x_full:.2f} (S>0.95).\n')
         lines.append('- Pergunta: “Log deixa a transição mais chamativa?” Resposta: sim, log no eixo x enfatiza a vizinhança do limiar.\n')
         lines.append('- Pergunta: “E o tamanho das componentes isoladas?” Resposta: s_finite(c) exibe um pico perto do limiar, indicando coalescência das componentes pequenas.\n')
     else:
@@ -187,19 +94,14 @@ def write_markdown_answers(data: Dict[str, np.ndarray], out_linear: Path, out_lo
     return out_md
     
 def main():
-    parser = argparse.ArgumentParser(description='Experimentos: ER sintético ou percolação em dados reais (subgrafo n=100).')
-    parser.add_argument('--mode', choices=['er','protein','www'], default='er')
+    parser = argparse.ArgumentParser(description='Experimento: ER sintético (n e c controlam a evolução da GCC).')
+    parser.add_argument('--mode', choices=['er'], default='er')
     parser.add_argument('--samples', type=int, default=100)
     parser.add_argument('--n', type=int, default=100, help='tamanho do subgrafo/amostra')
     # ER params
     parser.add_argument('--cmin', type=float, default=0.1)
     parser.add_argument('--cmax', type=float, default=6.0)
     parser.add_argument('--cpoints', type=int, default=60)
-    # Percolation params
-    parser.add_argument('--qmin', type=float, default=0.0)
-    parser.add_argument('--qmax', type=float, default=1.0)
-    parser.add_argument('--points', type=int, default=41)
-    parser.add_argument('--from_gcc', action='store_true', help='amostrar nós apenas da maior componente')
     args = parser.parse_args()
 
     if args.mode == 'er':
@@ -267,33 +169,6 @@ def main():
         print(f'Gerado: {out1}\nGerado: {out2}\nMarkdown: {md}')
         return
 
-    # modos com dados reais
-    if args.mode == 'protein':
-        dataset_label = 'Protein'
-        path = DATA_DIR / 'protein.edgelist.txt'
-        G_full = load_graph_undirected(path, directed=False)
-    else:
-        dataset_label = 'WWW'
-        path = DATA_DIR / 'www.edgelist.txt'
-        G_full = load_graph_undirected(path, directed=True)
-
-    # amostragem de subgrafo
-    if args.from_gcc:
-        gcc_nodes = largest_component_nodes(G_full)
-        G = sample_induced_subgraph(G_full.subgraph(gcc_nodes), n=args.n, seed=42)
-    else:
-        G = sample_induced_subgraph(G_full, n=args.n, seed=42)
-    q_values = np.linspace(args.qmin, args.qmax, args.points)
-    data = estimate_curves_percolation(G_base=G, q_values=q_values, samples=args.samples)
-    # adapt x-label
-    data = {'x': data['q'], 'S': data['S'], 's_finite': data['s_finite'], 'x_label': 'q'}
-    out1 = plot_curves_percolation({'q': data['x'], 'S': data['S'], 's_finite': data['s_finite']}, logx=False, logy=False, title=f'Percolação no subgrafo {dataset_label} (n=100)')
-    out2 = plot_curves_percolation({'q': data['x'], 'S': data['S'], 's_finite': data['s_finite']}, logx=True, logy=False, title=f'Percolação {dataset_label} (log x)')
-    qs = [0.2, 0.5, 0.9]
-    save_snapshots_graph(G, qs, label=dataset_label)
-    snap_paths = [OUT_DIR / f"snapshot_{dataset_label}_n{G.number_of_nodes()}_q{q}.png" for q in qs]
-    out_md = write_markdown_answers(data, out1, out2, snap_paths, dataset_label=dataset_label)
-    print(f"Gerado: {out1}\nGerado: {out2}\nSaída em: {OUT_DIR}\nMarkdown: {out_md}")
 
 if __name__ == '__main__':
     main()
