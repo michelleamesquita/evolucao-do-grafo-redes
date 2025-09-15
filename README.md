@@ -4,12 +4,15 @@ Este diretório contém o script `er_gcc.py` para reproduzir a evolução da com
 
 ## Como rodar (recomendado)
 ```bash
-python er_gcc.py --mode er --n 100 --samples 400 --cpoints 120
+python er_gcc.py --mode er --n 100 --samples 300 --cmin 0.1 --cmax 6.0 --cpoints 80
 ```
 Saídas em `out/`:
 - `er_curvas_linear.png` e `er_curvas_logx.png`
 - `snapshot_ER_n100_c{0.5,1.0,4.0}.png`
-- `RESPOSTAS.md` com perguntas e respostas objetivas
+
+## RELATÓRIO FINAL
+
+- [Relatório de métricas (Markdown)](./RESPOSTAS.md)
 
 ## Métricas e plots
 - S: fração média de nós na componente gigante (GCC)
